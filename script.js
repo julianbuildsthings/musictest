@@ -3,24 +3,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     const resultContainer = document.getElementById('result-container');
     const buttonContent = btn.querySelector('.button-content');
 
-    // Attempt to load the API token from the local .env file
-    let apiToken = '';
-    try {
-        const envResponse = await fetch('.env');
-        const envText = await envResponse.text();
-        const match = envText.match(/API_TOKEN=(.+)/);
-        if (match) {
-            apiToken = match[1].trim();
+    // Attempt to load the API token from the local .env file (works locally)
+    let apiToken = localStorage.getItem('discogs_api_token') || '';
+
+    if (!apiToken) {
+        try {
+            const envResponse = await fetch('.env');
+            if (envResponse.ok) {
+                const envText = await envResponse.text();
+                const match = envText.match(/API_TOKEN=(.+)/);
+                if (match) {
+                    apiToken = match[1].trim();
+                }
+            }
+        } catch (e) {
+            console.warn("Could not load .env file. Running in production mode.");
         }
-    } catch (e) {
-        console.warn("Could not load .env file. Ensure your local server is running and .env exists.");
     }
 
     btn.addEventListener('click', async () => {
         if (!apiToken || apiToken === 'your_token_here') {
-            resultContainer.innerHTML = `<div class="album-result" style="color: #ff6b6b; font-size: 0.9rem;">Error: Please set your Discogs API token in the .env file.</div>`;
-            resultContainer.classList.remove('hidden');
-            return;
+            const userToken = prompt("Please enter your Discogs API token. It will be saved in your browser for future use:");
+            if (userToken) {
+                apiToken = userToken.trim();
+                localStorage.setItem('discogs_api_token', apiToken);
+            } else {
+                resultContainer.innerHTML = `<div class="album-result" style="color: #ff6b6b; font-size: 0.9rem;">Error: A Discogs API token is required.</div>`;
+                resultContainer.classList.remove('hidden');
+                return;
+            }
         }
 
         // Subtle active tilt effect
