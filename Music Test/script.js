@@ -1,36 +1,84 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const btn = document.getElementById('randomize-btn');
     const resultContainer = document.getElementById('result-container');
+    const buttonContent = btn.querySelector('.button-content');
     
-    // Sample mock data 
-    const mockAlbums = [
-        "Dark Side of the Moon - Pink Floyd",
-        "Abbey Road - The Beatles",
-        "To Pimp a Butterfly - Kendrick Lamar",
-        "Rumours - Fleetwood Mac",
-        "Thriller - Michael Jackson",
-        "Nevermind - Nirvana",
-        "Purple Rain - Prince",
-        "The Miseducation of Lauryn Hill",
-        "Discovery - Daft Punk",
-        "In Rainbows - Radiohead"
-    ];
+    // Attempt to load the API token from the local .env file
+    let apiToken = '';
+    try {
+        const envResponse = await fetch('.env');
+        const envText = await envResponse.text();
+        const match = envText.match(/API_TOKEN=(.+)/);
+        if (match) {
+            apiToken = match[1].trim();
+        }
+    } catch (e) {
+        console.warn("Could not load .env file. Ensure your local server is running and .env exists.");
+    }
 
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
+        if (!apiToken || apiToken === 'your_token_here') {
+            resultContainer.innerHTML = `<div class="album-result" style="color: #ff6b6b; font-size: 0.9rem;">Error: Please set your Discogs API token in the .env file.</div>`;
+            resultContainer.classList.remove('hidden');
+            return;
+        }
+
         // Subtle active tilt effect
         btn.style.transform = 'scale(0.95) rotate(-1.5deg)';
         setTimeout(() => {
             btn.style.transform = '';
         }, 150);
 
-        // Hide, set content, and show logic
+        buttonContent.textContent = "Searching...";
+        btn.disabled = true;
         resultContainer.classList.add('hidden');
         
-        // Small delay to allow fade out before showing new result
-        setTimeout(() => {
-            const randomAlbum = mockAlbums[Math.floor(Math.random() * mockAlbums.length)];
-            resultContainer.innerHTML = `<div class="album-result">${randomAlbum}</div>`;
+        try {
+            // Pick a random year and a random page to get diverse results
+            const randomYear = Math.floor(Math.random() * (2023 - 1970 + 1)) + 1970;
+            const randomPage = Math.floor(Math.random() * 5) + 1; 
+            
+            const response = await fetch(`https://api.discogs.com/database/search?type=master&year=${randomYear}&page=${randomPage}&per_page=15`, {
+                headers: {
+                    'Authorization': `Discogs token=${apiToken}`,
+                    'User-Agent': 'RandomAlbumApp/1.0'
+                }
+            });
+
+            if (!response.ok) throw new Error('Failed to fetch from Discogs');
+            
+            const data = await response.json();
+            const results = data.results;
+            
+            if (results && results.length > 0) {
+                // Pick a random master release from the current page
+                const randomAlbum = results[Math.floor(Math.random() * results.length)];
+                
+                // Discogs usually formats the title as "Artist - Album"
+                const titleParts = randomAlbum.title.split(' - ');
+                const artist = titleParts[0];
+                const albumTitle = titleParts.slice(1).join(' - ') || randomAlbum.title;
+                const coverImage = randomAlbum.cover_image && randomAlbum.cover_image.indexOf('spacer.gif') === -1 ? randomAlbum.cover_image : '';
+
+                let html = '<div class="album-result" style="display: flex; flex-direction: column; align-items: center; gap: 1rem;">';
+                if (coverImage) {
+                    html += `<img src="${coverImage}" alt="${albumTitle} cover" style="width: 200px; height: 200px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); object-fit: cover;">`;
+                }
+                html += `<div><strong style="font-size: 1.2rem; display: block; margin-bottom: 0.2rem;">${albumTitle}</strong>`;
+                html += `<span style="opacity: 0.8; font-size: 0.9rem;">${artist} &bull; ${randomAlbum.year || randomYear}</span></div>`;
+                html += '</div>';
+
+                resultContainer.innerHTML = html;
+            } else {
+                resultContainer.innerHTML = `<div class="album-result">Couldn't find an album for that random slice, try again!</div>`;
+            }
+        } catch (error) {
+            console.error(error);
+            resultContainer.innerHTML = `<div class="album-result" style="color: #ff6b6b; font-size: 0.9rem;">Error fetching from Discogs API. Check your token or network.</div>`;
+        } finally {
             resultContainer.classList.remove('hidden');
-        }, 300);
+            buttonContent.textContent = "Random album";
+            btn.disabled = false;
+        }
     });
 });
